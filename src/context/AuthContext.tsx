@@ -1,7 +1,8 @@
 import { createContext, ReactNode, useState } from 'react';
+import { MEU_IP } from '../services/api'; // Importa a variável do ficheiro api.ts
 
-// Substitua pelo IP da sua máquina
-export const API_URL = 'http://192.168.1.121:3000/api';
+// Monta a URL dinamicamente usando a mesma variável
+export const API_URL = `http://${MEU_IP}:3000/api`;
 
 interface AuthContextData {
   token: string | null;
