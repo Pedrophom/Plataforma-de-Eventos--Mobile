@@ -1,7 +1,15 @@
-import { Stack, useRouter } from 'expo-router';
-import { useContext, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { API_URL, AuthContext } from '../../src/context/AuthContext';
+import { Stack, useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
+} from 'react-native';
+import { API_URL, useAuth } from '../../src/context/AuthContext';
 
 interface Inscricao {
   id: string;
@@ -16,132 +24,131 @@ interface Inscricao {
 
 export default function MinhasInscricoes() {
   const router = useRouter();
-  const { token } = useContext(AuthContext);
+  const { token } = useAuth();
   const [inscricoes, setInscricoes] = useState<Inscricao[]>([]);
   const [carregando, setCarregando] = useState(true);
 
   const carregarInscricoes = async () => {
     try {
-      const res = await fetch(`${API_URL}/my-registrations`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+      setCarregando(true);
+      const resposta = await fetch(`${API_URL}/my-registrations`, {
+        headers: { Authorization: `Bearer ${token}` },
       });
-      if (res.ok) {
-        const dados = await res.json();
-        setInscricoes(dados);
+
+      if (resposta.ok) {
+        const dados = await resposta.json();
+        setInscricoes(Array.isArray(dados) ? dados : []);
       }
     } catch (error) {
-      Alert.alert("Erro", "Não foi possível carregar as inscrições.");
+      console.error("Erro ao buscar inscrições:", error);
     } finally {
       setCarregando(false);
     }
   };
 
-  useEffect(() => {
-    carregarInscricoes();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      carregarInscricoes();
+    }, [token])
+  );
 
-  const cancelarInscricao = async (idInscricao: string, tituloEvento: string) => {
+  const handleCancelarInscricao = async (inscricaoId: string) => {
     Alert.alert(
       "Cancelar Inscrição",
-      `Tem a certeza que deseja cancelar a sua inscrição em "${tituloEvento}"?`,
+      "Tem certeza que deseja cancelar a sua inscrição neste evento?",
       [
         { text: "Não", style: "cancel" },
-        { 
-          text: "Sim, Cancelar", 
+        {
+          text: "Sim, Cancelar",
           style: "destructive",
           onPress: async () => {
             try {
-              const res = await fetch(`${API_URL}/registrations/${idInscricao}`, {
+              const resposta = await fetch(`${API_URL}/registrations/${inscricaoId}`, {
                 method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${token}` }
+                headers: { Authorization: `Bearer ${token}` },
               });
 
-              if (res.ok) {
-                setInscricoes((prev) => prev.filter(item => item.id !== idInscricao));
+              if (resposta.ok) {
                 Alert.alert("Sucesso", "Inscrição cancelada.");
+                carregarInscricoes();
               } else {
-                Alert.alert("Erro", "Não foi possível cancelar.");
+                Alert.alert("Erro", "Não foi possível cancelar a inscrição.");
               }
             } catch (error) {
-              Alert.alert("Erro", "Falha de conexão.");
+              Alert.alert("Erro", "Falha na conexão com o servidor.");
             }
-          }
-        }
+          },
+        },
       ]
     );
   };
 
-  const renderInscricao = ({ item }: { item: Inscricao }) => (
+  const renderItem = ({ item }: { item: Inscricao }) => (
     <View style={styles.card}>
       <Text style={styles.cardTitle}>{item.evento.titulo}</Text>
       <Text style={styles.cardInfo}>Data: {item.evento.data} às {item.evento.horario}</Text>
       <Text style={styles.cardInfo}>Local: {item.evento.local}</Text>
-      
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 15 }}>
-        <TouchableOpacity 
-          style={[styles.cancelButton, { backgroundColor: '#e5e7eb', borderColor: '#d1d5db', flex: 1, marginRight: 10 }]}
-          onPress={() => router.push({ pathname: '/(app)/evento/[id]', params: { id: item.evento.id, inscrito: 'true' } } as any)}
+
+      <View style={styles.buttonGroup}>
+        <TouchableOpacity
+          style={styles.buttonDetails}
+          onPress={() => router.push(`/(app)/evento/${item.evento.id}` as any)}
         >
-          <Text style={[styles.cancelButtonText, { color: '#374151' }]}>Ver Detalhes</Text>
+          <Text style={styles.buttonDetailsText}>Ver Detalhes</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={[styles.cancelButton, { flex: 1, marginLeft: 10 }]}
-          onPress={() => cancelarInscricao(item.id, item.evento.titulo)}
+        <TouchableOpacity
+          style={styles.buttonCancel}
+          onPress={() => handleCancelarInscricao(item.id)}
         >
-          <Text style={styles.cancelButtonText}>Cancelar</Text>
+          <Text style={styles.buttonCancelText}>Cancelar</Text>
         </TouchableOpacity>
       </View>
     </View>
   );
 
   return (
-    <>
-      <Stack.Screen 
-        options={{ 
-          title: "Minhas Inscrições",
+    <View style={styles.container}>
+      {/* Adiciona o cabeçalho verde com o botão voltar e empurra a lista para baixo da barra de status */}
+      <Stack.Screen
+        options={{
+          headerShown: true,
+          title: 'Minhas Inscrições',
           headerStyle: { backgroundColor: '#00823b' },
           headerTintColor: '#fff',
-          headerTitleStyle: { fontWeight: 'bold' }
-        }} 
+          headerTitleStyle: { fontWeight: 'bold' },
+        }}
       />
 
-      <View style={styles.container}>
-        {carregando ? (
-          <ActivityIndicator size="large" color="#00823b" style={{ marginTop: 40 }} />
-        ) : inscricoes.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>Você ainda não se inscreveu em nenhum evento.</Text>
-            <TouchableOpacity 
-              style={styles.exploreButton}
-              onPress={() => router.back()}
-            >
-              <Text style={styles.exploreButtonText}>Explorar Eventos</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <FlatList
-            data={inscricoes}
-            keyExtractor={(item) => item.id}
-            renderItem={renderInscricao}
-            contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
-            showsVerticalScrollIndicator={false}
-          />
-        )}
-      </View>
-    </>
+      {carregando ? (
+        <ActivityIndicator size="large" color="#00823b" style={{ marginTop: 40 }} />
+      ) : inscricoes.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>Você ainda não possui inscrições ativas.</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={inscricoes}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          contentContainerStyle={{ padding: 20 }}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f3f4f6' },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
-  emptyText: { fontSize: 16, color: '#6b7280', textAlign: 'center', marginBottom: 20 },
-  exploreButton: { backgroundColor: '#00823b', paddingVertical: 12, paddingHorizontal: 25, borderRadius: 8 },
-  exploreButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+  emptyText: { color: '#6b7280', fontSize: 16, textAlign: 'center' },
   card: { backgroundColor: '#fff', padding: 18, borderRadius: 12, marginBottom: 15, elevation: 2, borderLeftWidth: 4, borderLeftColor: '#00823b' },
   cardTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827', marginBottom: 8 },
   cardInfo: { fontSize: 14, color: '#4b5563', marginBottom: 4 },
-  cancelButton: { marginTop: 15, backgroundColor: '#fee2e2', paddingVertical: 10, borderRadius: 6, alignItems: 'center', borderWidth: 1, borderColor: '#fca5a5' },
-  cancelButtonText: { color: '#dc2626', fontWeight: 'bold', fontSize: 14 },
+  buttonGroup: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 15 },
+  buttonDetails: { backgroundColor: '#e5e7eb', flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: 'center', marginRight: 8 },
+  buttonDetailsText: { color: '#1f2937', fontWeight: 'bold', fontSize: 14 },
+  buttonCancel: { backgroundColor: '#fee2e2', flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: 'center', marginLeft: 8, borderWidth: 1, borderColor: '#fca5a5' },
+  buttonCancelText: { color: '#dc2626', fontWeight: 'bold', fontSize: 14 },
 });

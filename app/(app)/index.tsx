@@ -1,7 +1,7 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useContext, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { API_URL, AuthContext } from '../../src/context/AuthContext';
+import { API_URL, useAuth } from '../../src/context/AuthContext';
 
 interface Evento {
   id: string;
@@ -13,25 +13,32 @@ interface Evento {
 
 export default function HomeMobile() {
   const router = useRouter();
-  const { signOut, token } = useContext(AuthContext); 
+  const { signOut, token } = useAuth(); 
   const [eventos, setEventos] = useState<Evento[]>([]);
   const [carregando, setCarregando] = useState(true);
 
-  // Substituímos o useEffect pelo useFocusEffect + useCallback
   useFocusEffect(
     useCallback(() => {
       const carregarDados = async () => {
         try {
           const [resEventos, resInscricoes] = await Promise.all([
             fetch(`${API_URL}/events`),
-            fetch(`${API_URL}/my-registrations`, { headers: { 'Authorization': `Bearer ${token}` } })
+            fetch(`${API_URL}/my-registrations`, { 
+              headers: { 'Authorization': `Bearer ${token}` } 
+            })
           ]);
 
-          const dadosEventos = await resEventos.json();
-          const dadosInscricoes = resInscricoes.ok ? await resInscricoes.json() : [];
+          // Converte as respostas com verificação prévia de status
+          const dadosEventosBrutos = resEventos.ok ? await resEventos.json() : [];
+          const dadosInscricoesBrutos = resInscricoes.ok ? await resInscricoes.json() : [];
 
+          // Proteção contra retornos que não sejam Arrays (evita TypeError no .filter)
+          const dadosEventos = Array.isArray(dadosEventosBrutos) ? dadosEventosBrutos : [];
+          const dadosInscricoes = Array.isArray(dadosInscricoesBrutos) ? dadosInscricoesBrutos : [];
+
+          // Filtro defensivo com encadeamento opcional (?.) para evitar aceder a propriedades nulas
           const eventosNaoInscritos = dadosEventos.filter((evento: Evento) => 
-            !dadosInscricoes.some((inscricao: any) => inscricao.evento.id === evento.id)
+            !dadosInscricoes.some((inscricao: any) => inscricao?.evento?.id === evento.id)
           );
 
           setEventos(eventosNaoInscritos);
@@ -43,7 +50,7 @@ export default function HomeMobile() {
       };
 
       carregarDados();
-    }, [token]) // A dependência do token garante que recarrega se o utilizador mudar
+    }, [token])
   );
 
   const handleSair = () => {
